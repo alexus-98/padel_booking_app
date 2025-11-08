@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import psycopg2
+from urllib.parse import urlparse
 
 # Load environment variables from .env
 load_dotenv()

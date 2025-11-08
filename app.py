@@ -22,24 +22,45 @@ DB_NAME = "database.db"
 
 # ------------------ Database Setup ------------------
 
+import os
+import sqlite3
+import psycopg2
+from urllib.parse import urlparse
+
 def get_db_connection():
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    return conn
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        # PostgreSQL on Render
+        result = urlparse(db_url)
+        conn = psycopg2.connect(
+            database=result.path[1:],
+            user=result.username,
+            password=result.password,
+            host=result.hostname,
+            port=result.port,
+        )
+        conn.autocommit = True
+        return conn
+    else:
+        # SQLite locally
+        conn = sqlite3.connect("database.db")
+        conn.row_factory = sqlite3.Row
+        return conn
 
 
 def init_db():
     conn = get_db_connection()
-    conn.execute('''
+    cursor = conn.cursor()
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS slots (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             date TEXT,
             start_time TEXT,
             end_time TEXT,
             status TEXT DEFAULT 'available',
             client_name TEXT,
             client_email TEXT
-        )
+        );
     ''')
     conn.commit()
     conn.close()

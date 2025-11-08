@@ -104,8 +104,9 @@ def logout():
 
 @app.route("/api/slots")
 def api_slots():
-    """Return available or all slots as JSON for FullCalendar"""
+    """Return slots for calendar, with name shown only for coach."""
     only_available = request.args.get("only_available")
+    is_coach = session.get("coach_logged_in")
 
     conn = get_db_connection()
     if only_available:
@@ -116,14 +117,23 @@ def api_slots():
 
     events = []
     for s in slots:
+        if s["status"] == "booked":
+            title = "Booked"
+            if is_coach and s["client_name"]:
+                title += f" — {s['client_name']}"
+        else:
+            title = "Available"
+
         events.append({
             "id": s["id"],
-            "title": "Available" if s["status"] == "available" else "Booked",
+            "title": title,
             "start": f"{s['date']}T{s['start_time']}",
             "end": f"{s['date']}T{s['end_time']}",
             "color": "#0091ad" if s["status"] == "available" else "#ccc"
         })
+
     return jsonify(events)
+
 
 
 @app.route("/api/add_slot", methods=["POST"])

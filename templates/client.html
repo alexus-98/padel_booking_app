@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Book a Padel Lesson</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      background: linear-gradient(180deg, #e8f4f8, #fefefe);
+      font-family: "Inter", sans-serif;
+    }
+    h1 {
+      color: #004b6b;
+      font-weight: 600;
+    }
+    #calendar {
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      background: white;
+      padding: 1rem;
+    }
+    .fc-day-today {
+      background-color: #fff9e6 !important;
+    }
+    .navbar {
+      background: white;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    .btn-primary {
+      background-color: #0091ad;
+      border: none;
+    }
+    .btn-primary:hover {
+      background-color: #007f97;
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-light mb-4">
+    <div class="container">
+      <a class="navbar-brand fw-semibold" href="/">🥎 Padel Scheduler</a>
+    </div>
+  </nav>
+
+  <div class="container py-4">
+    <h1 class="text-center mb-4">Book a Padel Lesson</h1>
+    <div id="calendar" class="mb-4"></div>
+  </div>
+
+  <!-- Booking Modal -->
+  <div class="modal fade" id="bookingModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Book a Training Slot</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="bookingForm">
+            <input type="hidden" id="slotId">
+            <div class="mb-3">
+              <label class="form-label">Your Name</label>
+              <input type="text" class="form-control" id="clientName" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Your Email</label>
+              <input type="email" class="form-control" id="clientEmail" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Confirm Booking</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const calendarEl = document.getElementById('calendar');
+      const bookingModal = new bootstrap.Modal(document.getElementById('bookingModal'));
+      let selectedSlotId = null;
+
+      const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'timeGridWeek',
+        firstDay: 1,
+        nowIndicator: true,
+        allDaySlot: false,
+        slotMinTime: '07:00:00',
+        slotMaxTime: '23:00:00',
+        height: 'auto',
+        events: '/api/slots?only_available=true',  // ✅ Only available slots
+        eventClick: function(info) {
+          const event = info.event;
+          selectedSlotId = event.id;
+          bookingModal.show();
+        }
+      });
+
+      calendar.render();
+
+      document.getElementById('bookingForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = document.getElementById('clientName').value;
+        const email = document.getElementById('clientEmail').value;
+
+        const response = await fetch('/api/book_slot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: selectedSlotId, name, email })
+        });
+
+        const result = await response.json();
+        bookingModal.hide();
+
+        if (result.success) {
+          alert(`✅ Booking confirmed!\nA confirmation email has been sent to ${email}.`);
+          calendar.refetchEvents();
+        } else {
+          alert("❌ Something went wrong. Please try again.");
+        }
+      });
+    });
+  </script>
+</body>
+</html>

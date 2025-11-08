@@ -1,0 +1,17 @@
+# Ignore virtual environments
+book_app/
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore local secrets
+.env
+
+# Ignore local database
+*.db
+
+# Ignore OS/editor junk
+.DS_Store
+.vscode/

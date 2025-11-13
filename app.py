@@ -20,15 +20,9 @@ SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
-DB_NAME = "database.db"
 
 
 # ------------------ Database Setup ------------------
-
-import os
-import sqlite3
-import psycopg2
-from urllib.parse import urlparse
 
 def get_db_connection():
     db_url = os.getenv("DATABASE_URL")
@@ -55,17 +49,36 @@ def get_db_connection():
 def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS slots (
-            id SERIAL PRIMARY KEY,
-            date TEXT,
-            start_time TEXT,
-            end_time TEXT,
-            status TEXT DEFAULT 'available',
-            client_name TEXT,
-            client_email TEXT
-        );
-    ''')
+
+    db_url = os.getenv("DATABASE_URL")
+
+    if db_url:
+        # PostgreSQL schema
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS slots (
+                id SERIAL PRIMARY KEY,
+                date TEXT,
+                start_time TEXT,
+                end_time TEXT,
+                status TEXT DEFAULT 'available',
+                client_name TEXT,
+                client_email TEXT
+            );
+        """)
+    else:
+        # SQLite schema
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS slots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT,
+                start_time TEXT,
+                end_time TEXT,
+                status TEXT DEFAULT 'available',
+                client_name TEXT,
+                client_email TEXT
+            );
+        """)
+
     conn.commit()
     conn.close()
 
@@ -134,10 +147,14 @@ def api_slots():
     is_coach = session.get("coach_logged_in")
 
     conn = get_db_connection()
+
     if only_available:
-        slots = conn.execute("SELECT * FROM slots WHERE status='available'").fetchall()
+        slots = conn.execute(
+            "SELECT * FROM slots WHERE status='available'"
+        ).fetchall()
     else:
         slots = conn.execute("SELECT * FROM slots").fetchall()
+
     conn.close()
 
     events = []
@@ -160,7 +177,6 @@ def api_slots():
     return jsonify(events)
 
 
-
 @app.route("/api/add_slot", methods=["POST"])
 def add_slot():
     """Coach adds a new available slot"""
@@ -173,10 +189,12 @@ def add_slot():
     end = data.get("end_time")
 
     conn = get_db_connection()
+
     conn.execute(
-        "INSERT INTO slots (date, start_time, end_time, status) VALUES (?, ?, ?, 'available')",
-        (date, start, end),
+        "INSERT INTO slots (date, start_time, end_time, status) VALUES (%s, %s, %s, 'available')",
+        (date, start, end)
     )
+
     conn.commit()
     conn.close()
 
@@ -190,25 +208,27 @@ def delete_slot(slot_id):
         return jsonify({"success": False, "error": "Unauthorized"}), 403
 
     conn = get_db_connection()
-    conn.execute("DELETE FROM slots WHERE id = ?", (slot_id,))
+    conn.execute("DELETE FROM slots WHERE id=%s", (slot_id,))
     conn.commit()
     conn.close()
+
     return jsonify({"success": True})
 
 
 @app.route("/api/unbook_slot/<int:slot_id>", methods=["POST"])
 def unbook_slot(slot_id):
-    """Coach cancels a booking and makes the slot available again"""
+    """Coach cancels a booking"""
     if not session.get("coach_logged_in"):
         return jsonify({"success": False, "error": "Unauthorized"}), 403
 
     conn = get_db_connection()
     conn.execute(
-        "UPDATE slots SET status='available', client_name=NULL, client_email=NULL WHERE id=?",
-        (slot_id,),
+        "UPDATE slots SET status='available', client_name=NULL, client_email=NULL WHERE id=%s",
+        (slot_id,)
     )
     conn.commit()
     conn.close()
+
     return jsonify({"success": True})
 
 
@@ -216,21 +236,25 @@ def unbook_slot(slot_id):
 def book_slot():
     """Client books an available slot"""
     data = request.get_json()
-    slot_id = data.get("id")
+
+    slot_id = int(data.get("id"))   # required for postgres
     name = data.get("name")
     email = data.get("email")
 
     conn = get_db_connection()
-    slot = conn.execute("SELECT * FROM slots WHERE id=?", (slot_id,)).fetchone()
+
+    slot = conn.execute(
+        "SELECT * FROM slots WHERE id=%s",
+        (slot_id,)
+    ).fetchone()
 
     if not slot or slot["status"] == "booked":
         conn.close()
         return jsonify({"success": False, "error": "Slot unavailable"})
 
-    # Update booking in DB
     conn.execute(
-        "UPDATE slots SET status='booked', client_name=?, client_email=? WHERE id=?",
-        (name, email, slot_id),
+        "UPDATE slots SET status='booked', client_name=%s, client_email=%s WHERE id=%s",
+        (name, email, slot_id)
     )
     conn.commit()
     conn.close()
@@ -250,6 +274,7 @@ def book_slot():
     </ul>
     <p>See you on court! 🥎</p>
     """
+
     coach_msg = f"""
     <h3>{name} wants to play!</h3>
     <p>{name} ({email}) has booked a session.</p>

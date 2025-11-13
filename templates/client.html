@@ -61,7 +61,7 @@
 <body>
   <nav class="navbar navbar-light mb-4">
     <div class="container">
-      <a class="navbar-brand fw-semibold mx-auto" href="/">🥎 Padel Scheduler</a>
+      <a class="navbar-brand fw-semibold mx-auto" href="/">🥎 Padel Booking App</a>
     </div>
   </nav>
 
@@ -104,79 +104,81 @@
     </div>
   </div>
 
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      const calendarEl = document.getElementById('calendar');
-      const bookingModal = new bootstrap.Modal(document.getElementById('bookingModal'));
-      let selectedSlotId = null;
+ <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const calendarEl = document.getElementById('calendar');
+    const bookingModal = new bootstrap.Modal(document.getElementById('bookingModal'));
+    let selectedSlotId = null;
 
-      // Initialize FullCalendar
-      const calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: window.innerWidth < 768 ? 'timeGridDay' : 'timeGridWeek',
-        firstDay: 1,
-        nowIndicator: true,
-        allDaySlot: false,
-        slotMinTime: '07:00:00',
-        slotMaxTime: '23:00:00',
-        height: 'auto',
-        events: '/api/slots?only_available=true',
-        eventClick: function(info) {
-          selectedSlotId = info.event.id;
-          bookingModal.show();
-        },
-        eventSources: [{
-          url: '/api/slots?only_available=true',
-          failure: function() {
-            console.error('Failed to load events from /api/slots');
-          }
-        }]
-      });
+    // Initialize FullCalendar
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+      initialView: window.innerWidth < 768 ? 'timeGridDay' : 'timeGridWeek',
+      firstDay: 1,
+      nowIndicator: true,
+      allDaySlot: false,
+      slotMinTime: '07:00:00',
+      slotMaxTime: '23:00:00',
+      height: 'auto',
 
-      calendar.render();
-
-      // Automatically switch view for mobile/desktop
-      window.addEventListener('resize', function() {
-        if (window.innerWidth < 768) {
-          calendar.changeView('timeGridDay');
-        } else {
-          calendar.changeView('timeGridWeek');
+      // ✅ Only ONE source of events
+      eventSources: [{
+        url: '/api/slots?only_available=true',
+        failure: function() {
+          console.error('Failed to load events from /api/slots');
         }
-      });
+      }],
 
-      // Handle booking
-      document.getElementById('bookingForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const name = document.getElementById('clientName').value;
-        const email = document.getElementById('clientEmail').value;
-
-        const response = await fetch('/api/book_slot', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: selectedSlotId, name, email })
-        });
-
-        const result = await response.json();
-        bookingModal.hide();
-
-        const successMessage = document.getElementById('successMessage');
-        if (result.success) {
-          successMessage.textContent = `✅ Booking confirmed! A confirmation email has been sent to ${email}.`;
-          successMessage.classList.remove('d-none');
-          calendar.refetchEvents();
-          setTimeout(() => successMessage.classList.add('d-none'), 6000);
-        } else {
-          successMessage.textContent = "❌ Something went wrong. Please try again.";
-          successMessage.classList.remove('alert-success');
-          successMessage.classList.add('alert-danger');
-          successMessage.classList.remove('d-none');
-          setTimeout(() => {
-            successMessage.classList.add('d-none');
-            successMessage.classList.remove('alert-danger');
-            successMessage.classList.add('alert-success');
-          }, 6000);
-        }
-      });
+      eventClick: function(info) {
+        selectedSlotId = info.event.id;
+        bookingModal.show();
+      }
     });
-  </script>
+
+    calendar.render();
+
+    // Auto-switch view based on screen size
+    window.addEventListener('resize', function() {
+      if (window.innerWidth < 768) {
+        calendar.changeView('timeGridDay');
+      } else {
+        calendar.changeView('timeGridWeek');
+      }
+    });
+
+    // Handle booking
+    document.getElementById('bookingForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('clientName').value;
+      const email = document.getElementById('clientEmail').value;
+
+      const response = await fetch('/api/book_slot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: selectedSlotId, name, email })
+      });
+
+      const result = await response.json();
+      bookingModal.hide();
+
+      const successMessage = document.getElementById('successMessage');
+      if (result.success) {
+        successMessage.textContent = `✅ Booking confirmed! A confirmation email has been sent to ${email}.`;
+        successMessage.classList.remove('d-none');
+        calendar.refetchEvents();
+        setTimeout(() => successMessage.classList.add('d-none'), 6000);
+      } else {
+        successMessage.textContent = "❌ Something went wrong. Please try again.";
+        successMessage.classList.remove('alert-success');
+        successMessage.classList.add('alert-danger');
+        successMessage.classList.remove('d-none');
+        setTimeout(() => {
+          successMessage.classList.add('d-none');
+          successMessage.classList.remove('alert-danger');
+          successMessage.classList.add('alert-success');
+        }, 6000);
+      }
+    });
+  });
+</script>
 </body>
 </html>

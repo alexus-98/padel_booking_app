@@ -249,7 +249,7 @@ def book_slot():
     <p>See you on court! 🥎</p>
     """
     coach_msg = f"""
-    <h3>New Booking</h3>
+    <h3>{name} wants to play!</h3>
     <p>{name} ({email}) has booked a session.</p>
     <ul>
       <li><b>Date:</b> {date}</li>

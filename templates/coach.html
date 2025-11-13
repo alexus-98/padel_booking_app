@@ -73,73 +73,83 @@
     <div id="calendar"></div>
   </div>
 
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      const calendarEl = document.getElementById('calendar');
-      const calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'timeGridWeek',
-        firstDay: 1,
-        nowIndicator: true,
-        allDaySlot: false,
-        slotMinTime: '07:00:00',
-        slotMaxTime: '23:00:00',
-        height: 'auto',
-        events: '/api/slots',
-        eventClick: async function(info) {
-          const event = info.event;
-          if (event.title.startsWith('Booked')) {
-            const choice = prompt(`This slot is booked.\nType "1" to cancel booking or "2" to delete it:`);
-            if (choice === '1') {
-              await fetch('/api/cancel_booking', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: event.id })
-              });
-            } else if (choice === '2') {
-              await fetch('/api/delete_slot', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: event.id })
-              });
-            }
-          } else {
-            const confirmDelete = confirm(`Delete this available slot?`);
-            if (confirmDelete) {
-              await fetch('/api/delete_slot', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: event.id })
-              });
-            }
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const calendarEl = document.getElementById('calendar');
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+      initialView: 'timeGridWeek',
+      firstDay: 1,
+      nowIndicator: true,
+      allDaySlot: false,
+      slotMinTime: '07:00:00',
+      slotMaxTime: '23:00:00',
+      height: 'auto',
+      events: '/api/slots',
+
+      eventClick: async function(info) {
+        const event = info.event;
+
+        // CASE 1 — BOOKED SLOT
+        if (event.title.startsWith('Booked')) {
+          const choice = prompt(
+            `This slot is booked.\n\nChoose:\n1 → Cancel booking\n2 → Delete slot entirely`
+          );
+
+          if (choice === '1') {
+            // CANCEL BOOKING
+            await fetch(`/api/unbook_slot/${event.id}`, {
+              method: 'POST'
+            });
           }
-          calendar.refetchEvents();
+
+          else if (choice === '2') {
+            // DELETE SLOT (BOOKED OR NOT)
+            await fetch(`/api/delete_slot/${event.id}`, {
+              method: 'DELETE'
+            });
+          }
         }
-      });
 
-      calendar.render();
+        // CASE 2 — AVAILABLE SLOT
+        else {
+          const confirmDelete = confirm("Delete this available slot?");
+          if (confirmDelete) {
+            await fetch(`/api/delete_slot/${event.id}`, {
+              method: 'DELETE'
+            });
+          }
+        }
 
-      document.getElementById('addSlotForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        const date = formData.get('date');
-        const startTime = formData.get('start_time');
-        const duration = parseFloat(formData.get('duration'));
-
-        const [hours, minutes] = startTime.split(':').map(Number);
-        const start = new Date(0, 0, 0, hours, minutes);
-        const end = new Date(start.getTime() + duration * 60 * 60 * 1000);
-        const endTime = `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
-
-        await fetch('/api/add_slot', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ date, start_time: startTime, end_time: endTime })
-        });
-
-        e.target.reset();
         calendar.refetchEvents();
-      });
+      }
     });
-  </script>
+
+    calendar.render();
+
+    // ADD SLOT (unchanged)
+    document.getElementById('addSlotForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const date = formData.get('date');
+      const startTime = formData.get('start_time');
+      const duration = parseFloat(formData.get('duration'));
+
+      const [hours, minutes] = startTime.split(':').map(Number);
+      const start = new Date(0, 0, 0, hours, minutes);
+      const end = new Date(start.getTime() + duration * 60 * 60 * 1000);
+      const endTime = `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
+
+      await fetch('/api/add_slot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date, start_time: startTime, end_time: endTime })
+      });
+
+      e.target.reset();
+      calendar.refetchEvents();
+    });
+  });
+</script>
+
 </body>
 </html>

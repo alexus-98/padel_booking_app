@@ -6,6 +6,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import psycopg2
+import psycopg2.extras
 from urllib.parse import urlparse
 
 # Load environment variables from .env
@@ -40,6 +41,7 @@ def get_db_connection():
             password=result.password,
             host=result.hostname,
             port=result.port,
+            cursor_factory=psycopg2.extras.RealDictCursor
         )
         conn.autocommit = True
         return conn

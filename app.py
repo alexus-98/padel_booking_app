@@ -1,5 +1,4 @@
 from flask import Flask, render_template, request, jsonify, redirect, session
-import sqlite3
 import os
 from dotenv import load_dotenv
 import psycopg2
@@ -16,8 +15,8 @@ from sendgrid.helpers.mail import Mail
 # Load environment variables
 load_dotenv()
 
-EMAIL_USER = os.getenv("EMAIL_USER")  # must be verified sender in SendGrid
-EMAIL_PASS = os.getenv("EMAIL_PASS")  # unused now, but kept in case
+EMAIL_USER = os.getenv("EMAIL_USER")
+EMAIL_PASS = os.getenv("EMAIL_PASS")
 COACH_EMAIL = os.getenv("COACH_EMAIL")
 COACH_PASSWORD = os.getenv("COACH_PASSWORD")
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
@@ -29,55 +28,40 @@ app.secret_key = SECRET_KEY
 
 # ------------------ DB Helpers ------------------
 
-def is_postgres():
-    return bool(os.getenv("DATABASE_URL"))
-
-
 def get_raw_connection():
-    """Return either a RealDictCursor Postgres conn or SQLite conn."""
+    """Always return a Postgres connection."""
     db_url = os.getenv("DATABASE_URL")
-    if db_url:
-        result = urlparse(db_url)
-        conn = psycopg2.connect(
-            database=result.path[1:],
-            user=result.username,
-            password=result.password,
-            host=result.hostname,
-            port=result.port,
-            cursor_factory=psycopg2.extras.RealDictCursor,
-        )
-        conn.autocommit = False
-        return conn
-    else:
-        conn = sqlite3.connect("database.db", check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        return conn
+    if not db_url:
+        raise RuntimeError("DATABASE_URL is not set. PostgreSQL is required.")
 
-
-def placeholder():
-    """Return correct parameter placeholder depending on DB."""
-    return "%s" if is_postgres() else "?"
+    result = urlparse(db_url)
+    conn = psycopg2.connect(
+        database=result.path[1:],
+        user=result.username,
+        password=result.password,
+        host=result.hostname,
+        port=result.port,
+        cursor_factory=psycopg2.extras.RealDictCursor,
+    )
+    conn.autocommit = False
+    return conn
 
 
 def run_query(conn, query, params=None, fetch=None):
-    """Unified query executor for both SQLite and Postgres."""
+    """
+    Execute a query with psycopg2 and optionally fetch results.
+    """
     params = params or ()
     try:
-        if is_postgres():
-            cur = conn.cursor()
-            cur.execute(query, params)
-            if fetch == "one":
-                return cur.fetchone()
-            if fetch == "all":
-                return cur.fetchall()
-            return None
-        else:
-            cur = conn.execute(query, params)
-            if fetch == "one":
-                return cur.fetchone()
-            if fetch == "all":
-                return cur.fetchall()
-            return None
+        cur = conn.cursor()
+        cur.execute(query, params)
+
+        if fetch == "one":
+            return cur.fetchone()
+        if fetch == "all":
+            return cur.fetchall()
+        return None
+
     except Exception:
         traceback.print_exc(file=sys.stdout)
         raise
@@ -102,45 +86,26 @@ def commit_and_close(conn):
 # ------------------ DB Initialization ------------------
 
 def init_db():
+    """Create the PostgreSQL table if not exists."""
     conn = get_raw_connection()
     try:
-        cur = conn.cursor() if is_postgres() else conn
-
-        if is_postgres():
-            # Postgres schema
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS slots (
-                    id SERIAL PRIMARY KEY,
-                    date TEXT,
-                    start_time TEXT,
-                    end_time TEXT,
-                    status TEXT DEFAULT 'available',
-                    client_name TEXT,
-                    client_email TEXT
-                );
-            """)
-        else:
-            # SQLite schema
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS slots (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    date TEXT,
-                    start_time TEXT,
-                    end_time TEXT,
-                    status TEXT DEFAULT 'available',
-                    client_name TEXT,
-                    client_email TEXT
-                );
-            """)
-
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS slots (
+                id SERIAL PRIMARY KEY,
+                date TEXT,
+                start_time TEXT,
+                end_time TEXT,
+                status TEXT DEFAULT 'available',
+                client_name TEXT,
+                client_email TEXT
+            );
+        """)
         conn.commit()
     except Exception:
         traceback.print_exc(file=sys.stdout)
     finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
+        conn.close()
 
 
 # ------------------ SendGrid Email Helper ------------------
@@ -225,16 +190,15 @@ def api_slots():
     try:
         if only_available:
             q = "SELECT * FROM slots WHERE status='available' ORDER BY date, start_time"
-            slots = run_query(conn, q, fetch="all")
         else:
             q = "SELECT * FROM slots ORDER BY date, start_time"
-            slots = run_query(conn, q, fetch="all")
+
+        slots = run_query(conn, q, fetch="all")
+
     except Exception:
         traceback.print_exc(file=sys.stdout)
-        try:
-            conn.close()
-        except Exception:
-            pass
+        try: conn.close()
+        except: pass
         return jsonify([])
 
     events = []
@@ -255,11 +219,7 @@ def api_slots():
             "color": "#0091ad" if status == "available" else "#ccc",
         })
 
-    try:
-        conn.close()
-    except Exception:
-        pass
-
+    conn.close()
     return jsonify(events)
 
 
@@ -277,19 +237,16 @@ def add_slot():
         return jsonify({"success": False, "error": "Missing fields"}), 400
 
     conn = get_raw_connection()
-    ph = placeholder()
 
     try:
-        q = f"INSERT INTO slots (date, start_time, end_time, status) VALUES ({ph}, {ph}, {ph}, 'available')"
+        q = "INSERT INTO slots (date, start_time, end_time, status) VALUES (%s, %s, %s, 'available')"
         run_query(conn, q, (date, start, end))
         commit_and_close(conn)
         return jsonify({"success": True})
     except Exception:
         traceback.print_exc(file=sys.stdout)
-        try:
-            conn.close()
-        except Exception:
-            pass
+        try: conn.close()
+        except: pass
         return jsonify({"success": False}), 500
 
 
@@ -299,19 +256,16 @@ def delete_slot(slot_id):
         return jsonify({"success": False, "error": "Unauthorized"}), 403
 
     conn = get_raw_connection()
-    ph = placeholder()
 
     try:
-        q = f"DELETE FROM slots WHERE id={ph}"
+        q = "DELETE FROM slots WHERE id=%s"
         run_query(conn, q, (slot_id,))
         commit_and_close(conn)
         return jsonify({"success": True})
     except Exception:
         traceback.print_exc(file=sys.stdout)
-        try:
-            conn.close()
-        except Exception:
-            pass
+        try: conn.close()
+        except: pass
         return jsonify({"success": False}), 500
 
 
@@ -321,19 +275,23 @@ def unbook_slot(slot_id):
         return jsonify({"success": False, "error": "Unauthorized"}), 403
 
     conn = get_raw_connection()
-    ph = placeholder()
 
     try:
-        q = f"UPDATE slots SET status='available', client_name=NULL, client_email=NULL WHERE id={ph}"
+        q = """
+            UPDATE slots SET
+                status='available',
+                client_name=NULL,
+                client_email=NULL
+            WHERE id=%s
+        """
         run_query(conn, q, (slot_id,))
         commit_and_close(conn)
         return jsonify({"success": True})
+
     except Exception:
         traceback.print_exc(file=sys.stdout)
-        try:
-            conn.close()
-        except Exception:
-            pass
+        try: conn.close()
+        except: pass
         return jsonify({"success": False}), 500
 
 
@@ -353,11 +311,10 @@ def book_slot():
         return jsonify({"success": False, "error": "Missing info"}), 400
 
     conn = get_raw_connection()
-    ph = placeholder()
 
     try:
         # SELECT slot
-        q_get = f"SELECT * FROM slots WHERE id={ph}"
+        q_get = "SELECT * FROM slots WHERE id=%s"
         slot = run_query(conn, q_get, (slot_id,), fetch="one")
 
         if not slot or slot["status"] == "booked":
@@ -365,10 +322,12 @@ def book_slot():
             return jsonify({"success": False, "error": "Slot unavailable"}), 200
 
         # UPDATE booking
-        q_update = f"""
-            UPDATE slots SET status='booked',
-            client_name={ph}, client_email={ph}
-            WHERE id={ph}
+        q_update = """
+            UPDATE slots
+            SET status='booked',
+                client_name=%s,
+                client_email=%s
+            WHERE id=%s
         """
         run_query(conn, q_update, (name, email, slot_id))
         commit_and_close(conn)
@@ -398,17 +357,15 @@ def book_slot():
         </ul>
         """
 
-        # Fire-and-forget emails (do NOT block)
         send_email(email, "Padel Training Confirmation", client_msg)
         send_email(COACH_EMAIL, "New Padel Booking", coach_msg)
 
         return jsonify({"success": True})
+
     except Exception:
         traceback.print_exc(file=sys.stdout)
-        try:
-            conn.close()
-        except Exception:
-            pass
+        try: conn.close()
+        except: pass
         return jsonify({"success": False, "error": "DB error"}), 500
 
 

@@ -62,7 +62,7 @@
       /* Make the week view wider so columns have enough space */
       .fc-timegrid,
       .fc-timeGridWeek-view .fc-timegrid-body {
-        min-width: 900px; /* Change to 800–1100px depending on preference */
+        min-width: 900px;
       }
 
       /* Allow horizontal scrolling on mobile */
@@ -95,7 +95,7 @@
     <h1 class="mb-3">Book a Padel Lesson</h1>
     <p class="text-muted mb-4">Choose an available slot below and confirm your booking.</p>
 
-    <!-- ✅ Success Message -->
+    <!-- Success Message -->
     <div id="successMessage" class="alert alert-success text-center d-none" role="alert">
       ✅ Booking confirmed! Check your email for details.
     </div>
@@ -108,49 +108,54 @@
   <div class="modal fade" id="bookingModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
+
         <div class="modal-header">
-          <h5 class="modal-title">Book a Training Slot</h5>
+          <div>
+            <h5 class="modal-title">Book a Training Slot</h5>
+            <div id="slotDetails" class="text-muted small mt-1"></div> <!-- NEW -->
+          </div>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
+
         <div class="modal-body">
           <form id="bookingForm">
             <input type="hidden" id="slotId">
+
             <div class="mb-3 text-start">
               <label class="form-label">Your Name</label>
               <input type="text" class="form-control" id="clientName" required>
             </div>
+
             <div class="mb-3 text-start">
               <label class="form-label">Your Email</label>
               <input type="email" class="form-control" id="clientEmail" required>
             </div>
+
             <button type="submit" class="btn btn-primary w-100 mt-3">Confirm Booking</button>
           </form>
         </div>
+
       </div>
     </div>
   </div>
 
- <script>
+  <script>
   document.addEventListener('DOMContentLoaded', function() {
     const calendarEl = document.getElementById('calendar');
     const bookingModal = new bootstrap.Modal(document.getElementById('bookingModal'));
     let selectedSlotId = null;
 
-    // Initialize FullCalendar
     const calendar = new FullCalendar.Calendar(calendarEl, {
-      // Always show weekly time grid (mobile & desktop)
       initialView: 'timeGridWeek',
-      firstDay: 1,               // Monday start
+      firstDay: 1,
       nowIndicator: true,
       allDaySlot: false,
       slotMinTime: '07:00:00',
       slotMaxTime: '22:00:00',
       height: 'auto',
 
-      // Hide weekends (Saturday=6, Sunday=0) — only show Mon-Fri
       weekends: false,
 
-      // ✅ Only ONE source of events
       eventSources: [{
         url: '/api/slots?only_available=true',
         failure: function() {
@@ -160,18 +165,30 @@
 
       eventClick: function(info) {
         selectedSlotId = info.event.id;
+
+        // Format date & time
+        const start = info.event.start;
+        const end = info.event.end;
+
+        const dayName = start.toLocaleDateString("en-US", { weekday: "long" });
+        const dateStr = start.toLocaleDateString("en-US", { day: "numeric", month: "long"});
+
+        const startTime = start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const endTime = end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+        document.getElementById('slotDetails').textContent =
+          `${dayName}, ${dateStr} — ${startTime} to ${endTime}`;
+
         bookingModal.show();
       }
     });
 
     calendar.render();
 
-    // Ensure resizing never switches to daily on mobile — always weekly
     window.addEventListener('resize', function() {
       calendar.changeView('timeGridWeek');
     });
 
-    // Handle booking
     document.getElementById('bookingForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const name = document.getElementById('clientName').value;
@@ -205,6 +222,7 @@
       }
     });
   });
-</script>
+  </script>
+
 </body>
 </html>

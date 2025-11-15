@@ -112,7 +112,7 @@
 
     // Initialize FullCalendar
     const calendar = new FullCalendar.Calendar(calendarEl, {
-      initialView: window.innerWidth < 768 ? 'timeGridDay' : 'timeGridWeek',
+      initialView: window.innerWidth < 768 ? 'timeGridWeek' : 'timeGridWeek',
       firstDay: 1,
       nowIndicator: true,
       allDaySlot: false,
@@ -139,7 +139,7 @@
     // Auto-switch view based on screen size
     window.addEventListener('resize', function() {
       if (window.innerWidth < 768) {
-        calendar.changeView('timeGridDay');
+        calendar.changeView('timeGridWeek');
       } else {
         calendar.changeView('timeGridWeek');
       }

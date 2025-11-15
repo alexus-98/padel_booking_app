@@ -207,7 +207,7 @@ def api_slots():
         if status == "booked":
             title = "Booked"
             if is_coach and s["client_name"]:
-                title += f" — {s['client_name']}"
+                title = f"{s['client_name']}"
         else:
             title = "Available"
 

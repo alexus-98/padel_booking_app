@@ -76,14 +76,26 @@
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     const calendarEl = document.getElementById('calendar');
+
     const calendar = new FullCalendar.Calendar(calendarEl, {
       initialView: 'timeGridWeek',
       firstDay: 1,
       nowIndicator: true,
       allDaySlot: false,
       slotMinTime: '07:00:00',
-      slotMaxTime: '23:00:00',
+      slotMaxTime: '22:00:00',
       height: 'auto',
+
+      // ✅ Hide Saturday (6) and Sunday (0)
+      weekends: false,
+
+      // ✅ Show working hours Mon–Fri
+      businessHours: {
+        daysOfWeek: [1, 2, 3, 4, 5],
+        startTime: '07:00',
+        endTime: '22:00'
+      },
+
       events: '/api/slots',
 
       eventClick: async function(info) {
@@ -96,17 +108,9 @@
           );
 
           if (choice === '1') {
-            // CANCEL BOOKING
-            await fetch(`/api/unbook_slot/${event.id}`, {
-              method: 'POST'
-            });
-          }
-
-          else if (choice === '2') {
-            // DELETE SLOT (BOOKED OR NOT)
-            await fetch(`/api/delete_slot/${event.id}`, {
-              method: 'DELETE'
-            });
+            await fetch(`/api/unbook_slot/${event.id}`, { method: 'POST' });
+          } else if (choice === '2') {
+            await fetch(`/api/delete_slot/${event.id}`, { method: 'DELETE' });
           }
         }
 
@@ -114,9 +118,7 @@
         else {
           const confirmDelete = confirm("Delete this available slot?");
           if (confirmDelete) {
-            await fetch(`/api/delete_slot/${event.id}`, {
-              method: 'DELETE'
-            });
+            await fetch(`/api/delete_slot/${event.id}`, { method: 'DELETE' });
           }
         }
 

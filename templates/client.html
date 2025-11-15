@@ -112,13 +112,17 @@
 
     // Initialize FullCalendar
     const calendar = new FullCalendar.Calendar(calendarEl, {
-      initialView: window.innerWidth < 768 ? 'timeGridWeek' : 'timeGridWeek',
-      firstDay: 1,
+      // Always show weekly time grid (mobile & desktop)
+      initialView: 'timeGridWeek',
+      firstDay: 1,               // Monday start
       nowIndicator: true,
       allDaySlot: false,
       slotMinTime: '07:00:00',
-      slotMaxTime: '23:00:00',
+      slotMaxTime: '22:00:00',
       height: 'auto',
+
+      // Hide weekends (Saturday=6, Sunday=0) — only show Mon-Fri
+      weekends: false,
 
       // ✅ Only ONE source of events
       eventSources: [{
@@ -136,13 +140,9 @@
 
     calendar.render();
 
-    // Auto-switch view based on screen size
+    // Ensure resizing never switches to daily on mobile — always weekly
     window.addEventListener('resize', function() {
-      if (window.innerWidth < 768) {
-        calendar.changeView('timeGridWeek');
-      } else {
-        calendar.changeView('timeGridWeek');
-      }
+      calendar.changeView('timeGridWeek');
     });
 
     // Handle booking

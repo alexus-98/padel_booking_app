@@ -56,7 +56,33 @@
     .btn-primary:hover {
       background-color: #007f97;
     }
+
+    /* 📱 Mobile improvements for weekly calendar */
+    @media (max-width: 768px) {
+      /* Make the week view wider so columns have enough space */
+      .fc-timegrid,
+      .fc-timeGridWeek-view .fc-timegrid-body {
+        min-width: 900px; /* Change to 800–1100px depending on preference */
+      }
+
+      /* Allow horizontal scrolling on mobile */
+      #calendar {
+        overflow-x: auto;
+      }
+
+      /* Widen day header cells for readability */
+      .fc-col-header-cell {
+        min-width: 140px;
+        font-size: 0.9rem;
+      }
+
+      /* Slightly enlarge the left time column */
+      .fc-timegrid-axis {
+        font-size: 0.9rem;
+      }
+    }
   </style>
+
 </head>
 <body>
   <nav class="navbar navbar-light mb-4">

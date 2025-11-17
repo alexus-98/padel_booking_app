@@ -29,7 +29,6 @@ app.secret_key = SECRET_KEY
 # ------------------ DB Helpers ------------------
 
 def get_raw_connection():
-    """Always return a Postgres connection."""
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
         raise RuntimeError("DATABASE_URL is not set. PostgreSQL is required.")
@@ -48,9 +47,6 @@ def get_raw_connection():
 
 
 def run_query(conn, query, params=None, fetch=None):
-    """
-    Execute a query with psycopg2 and optionally fetch results.
-    """
     params = params or ()
     try:
         cur = conn.cursor()
@@ -71,7 +67,7 @@ def commit_and_close(conn):
     try:
         conn.commit()
     except Exception:
-        traceback.print_exc(file=sys.stdout)
+        traceback.print_exc()
         try:
             conn.rollback()
         except Exception:
@@ -86,7 +82,6 @@ def commit_and_close(conn):
 # ------------------ DB Initialization ------------------
 
 def init_db():
-    """Create the PostgreSQL table if not exists."""
     conn = get_raw_connection()
     try:
         cur = conn.cursor()
@@ -98,20 +93,20 @@ def init_db():
                 end_time TEXT,
                 status TEXT DEFAULT 'available',
                 client_name TEXT,
-                client_email TEXT
+                client_email TEXT,
+                court TEXT DEFAULT 'Unknown'
             );
         """)
         conn.commit()
     except Exception:
-        traceback.print_exc(file=sys.stdout)
+        traceback.print_exc()
     finally:
         conn.close()
 
 
-# ------------------ SendGrid Email Helper ------------------
+# ------------------ Email Helpers ------------------
 
 def _sendgrid_send(to_email, subject, message_html):
-    """Actual SendGrid API call inside a thread."""
     if not SENDGRID_KEY:
         print("SENDGRID_API_KEY missing — skipping email")
         return
@@ -126,11 +121,10 @@ def _sendgrid_send(to_email, subject, message_html):
         sg.send(email)
     except Exception as e:
         print("SendGrid email error:", e)
-        traceback.print_exc(file=sys.stdout)
+        traceback.print_exc()
 
 
 def send_email(to_email, subject, message_html):
-    """Fire-and-forget async email sending."""
     try:
         t = threading.Thread(
             target=_sendgrid_send,
@@ -196,7 +190,7 @@ def api_slots():
         slots = run_query(conn, q, fetch="all")
 
     except Exception:
-        traceback.print_exc(file=sys.stdout)
+        traceback.print_exc()
         try: conn.close()
         except: pass
         return jsonify([])
@@ -217,6 +211,9 @@ def api_slots():
             "start": f"{s['date']}T{s['start_time']}",
             "end": f"{s['date']}T{s['end_time']}",
             "color": "#0091ad" if status == "available" else "#ccc",
+            "extendedProps": {
+                "status": status
+            }
         })
 
     conn.close()
@@ -229,9 +226,11 @@ def add_slot():
         return jsonify({"success": False, "error": "Unauthorized"}), 403
 
     data = request.get_json() or {}
+
     date = data.get("date")
     start = data.get("start_time")
     end = data.get("end_time")
+    court = data.get("court", "Unknown")
 
     if not date or not start or not end:
         return jsonify({"success": False, "error": "Missing fields"}), 400
@@ -239,12 +238,16 @@ def add_slot():
     conn = get_raw_connection()
 
     try:
-        q = "INSERT INTO slots (date, start_time, end_time, status) VALUES (%s, %s, %s, 'available')"
-        run_query(conn, q, (date, start, end))
+        q = """
+            INSERT INTO slots (date, start_time, end_time, status, court)
+            VALUES (%s, %s, %s, 'available', %s)
+        """
+        run_query(conn, q, (date, start, end, court))
         commit_and_close(conn)
         return jsonify({"success": True})
+
     except Exception:
-        traceback.print_exc(file=sys.stdout)
+        traceback.print_exc()
         try: conn.close()
         except: pass
         return jsonify({"success": False}), 500
@@ -263,7 +266,7 @@ def delete_slot(slot_id):
         commit_and_close(conn)
         return jsonify({"success": True})
     except Exception:
-        traceback.print_exc(file=sys.stdout)
+        traceback.print_exc()
         try: conn.close()
         except: pass
         return jsonify({"success": False}), 500
@@ -289,7 +292,7 @@ def unbook_slot(slot_id):
         return jsonify({"success": True})
 
     except Exception:
-        traceback.print_exc(file=sys.stdout)
+        traceback.print_exc()
         try: conn.close()
         except: pass
         return jsonify({"success": False}), 500
@@ -313,7 +316,6 @@ def book_slot():
     conn = get_raw_connection()
 
     try:
-        # SELECT slot
         q_get = "SELECT * FROM slots WHERE id=%s"
         slot = run_query(conn, q_get, (slot_id,), fetch="one")
 
@@ -321,7 +323,7 @@ def book_slot():
             conn.close()
             return jsonify({"success": False, "error": "Slot unavailable"}), 200
 
-        # UPDATE booking
+        # Update booking
         q_update = """
             UPDATE slots
             SET status='booked',
@@ -332,11 +334,12 @@ def book_slot():
         run_query(conn, q_update, (name, email, slot_id))
         commit_and_close(conn)
 
-        # Prepare confirmation messages
         date = slot["date"]
         start = slot["start_time"]
         end = slot["end_time"]
+        court = slot.get("court", "Unknown")
 
+        # ------- Client email -------
         client_msg = f"""
         <h3>Booking Confirmation</h3>
         <p>Hi {name},</p>
@@ -344,16 +347,19 @@ def book_slot():
         <ul>
           <li><b>Date:</b> {date}</li>
           <li><b>Time:</b> {start} - {end}</li>
+          <li><b>Court:</b> {court}</li>
         </ul>
         <p>See you on court! 🥎</p>
         """
 
+        # ------- Coach email -------
         coach_msg = f"""
         <h3>{name} booked a session</h3>
         <p>{name} ({email}) booked a training session.</p>
         <ul>
           <li><b>Date:</b> {date}</li>
           <li><b>Time:</b> {start} - {end}</li>
+          <li><b>Court:</b> {court}</li>
         </ul>
         """
 
@@ -363,7 +369,7 @@ def book_slot():
         return jsonify({"success": True})
 
     except Exception:
-        traceback.print_exc(file=sys.stdout)
+        traceback.print_exc()
         try: conn.close()
         except: pass
         return jsonify({"success": False, "error": "DB error"}), 500

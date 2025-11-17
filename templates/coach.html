@@ -8,6 +8,7 @@
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+
 <style>
   body {
     background: linear-gradient(180deg, #e8f4f8, #fefefe);
@@ -34,32 +35,25 @@
     background-color: #007f97;
   }
 
-  /* 📱 Mobile improvements for weekly calendar */
   @media (max-width: 768px) {
-    /* Wider calendar so days are readable (Mon–Fri) */
     .fc-timegrid,
     .fc-timeGridWeek-view .fc-timegrid-body {
-      min-width: 900px; /* Adjust to 800–1100px if needed */
+      min-width: 900px;
     }
-
-    /* Allow horizontal scrolling */
     #calendar {
       overflow-x: auto;
     }
-
-    /* Widen day columns */
     .fc-col-header-cell {
       min-width: 140px;
       font-size: 0.9rem;
     }
-
-    /* Slightly larger hour labels */
     .fc-timegrid-axis {
       font-size: 0.9rem;
     }
   }
 </style>
 </head>
+
 <body>
   <nav class="navbar navbar-light mb-4">
     <div class="container">
@@ -74,8 +68,10 @@
   <div class="container py-4">
     <h1 class="text-center mb-4">Weekly Schedule</h1>
 
+    <!-- ▪▪▪ SLOT CREATION FORM ▪▪▪ -->
     <form id="addSlotForm" class="d-flex justify-content-center mb-4 flex-wrap gap-2">
       <input type="date" name="date" class="form-control w-auto" required>
+
       <select name="start_time" class="form-select w-auto" required>
         <option value="">Start time</option>
         <script>
@@ -86,12 +82,26 @@
           }
         </script>
       </select>
+
       <select name="duration" class="form-select w-auto" required>
         <option value="">Duration</option>
         <option value="1">1 hour</option>
         <option value="1.5">1.5 hours</option>
         <option value="2">2 hours</option>
       </select>
+
+      <!-- ▪▪▪ COURT DROPDOWN (OPTIONAL) ▪▪▪ -->
+      <select name="court" class="form-select w-auto">
+        <option value="Unknown">Court (optional)</option>
+        <option value="Court nr. 1">Court nr. 1</option>
+        <option value="Court nr. 2">Court nr. 2</option>
+        <option value="Court nr. 3">Court nr. 3</option>
+        <option value="Court nr. 4">Court nr. 4</option>
+        <option value="Court nr. 5">Court nr. 5</option>
+        <option value="Court nr. 6">Court nr. 6</option>
+        <option value="Court nr. 7">Court nr. 7</option>
+      </select>
+
       <button type="submit" class="btn btn-primary">Add Slot</button>
     </form>
 
@@ -99,83 +109,88 @@
   </div>
 
 <script>
-  document.addEventListener('DOMContentLoaded', function() {
-    const calendarEl = document.getElementById('calendar');
+document.addEventListener('DOMContentLoaded', function() {
+  const calendarEl = document.getElementById('calendar');
 
-    const calendar = new FullCalendar.Calendar(calendarEl, {
-      initialView: 'timeGridWeek',
-      firstDay: 1,
-      nowIndicator: true,
-      allDaySlot: false,
-      slotMinTime: '07:00:00',
-      slotMaxTime: '22:00:00',
-      height: 'auto',
+  const calendar = new FullCalendar.Calendar(calendarEl, {
+    initialView: 'timeGridWeek',
+    firstDay: 1,
+    nowIndicator: true,
+    allDaySlot: false,
+    slotMinTime: '07:00:00',
+    slotMaxTime: '22:00:00',
+    height: 'auto',
+    weekends: false,
+    businessHours: {
+      daysOfWeek: [1, 2, 3, 4, 5],
+      startTime: '07:00',
+      endTime: '22:00'
+    },
+    events: '/api/slots',
 
-      // ✅ Hide Saturday (6) and Sunday (0)
-      weekends: false,
+    eventClick: async function(info) {
+      const event = info.event;
+      const status = event.extendedProps.status;  // <-- real source of truth
 
-      // ✅ Show working hours Mon–Fri
-      businessHours: {
-        daysOfWeek: [1, 2, 3, 4, 5],
-        startTime: '07:00',
-        endTime: '22:00'
-      },
+      // BOOKED SLOT
+      if (status === "booked") {
 
-      events: '/api/slots',
+        const action = prompt(
+          "This slot is booked.\n\nChoose:\n1 → Cancel this lesson \n2 → Delete this slot completely\n\nType a number:"
+        );
 
-      eventClick: async function(info) {
-        const event = info.event;
-
-        // CASE 1 — BOOKED SLOT
-        if (event.title.startsWith('Booked')) {
-          const choice = prompt(
-            `This slot is booked.\n\nChoose:\n1 → Cancel booking\n2 → Delete slot entirely`
-          );
-
-          if (choice === '1') {
-            await fetch(`/api/unbook_slot/${event.id}`, { method: 'POST' });
-          } else if (choice === '2') {
-            await fetch(`/api/delete_slot/${event.id}`, { method: 'DELETE' });
-          }
+        if (action === "1") {
+          await fetch(`/api/unbook_slot/${event.id}`, { method: "POST" });
+          alert("Lesson cancelled.");
         }
 
-        // CASE 2 — AVAILABLE SLOT
-        else {
-          const confirmDelete = confirm("Delete this available slot?");
-          if (confirmDelete) {
-            await fetch(`/api/delete_slot/${event.id}`, { method: 'DELETE' });
-          }
+        else if (action === "2") {
+          await fetch(`/api/delete_slot/${event.id}`, { method: "DELETE" });
+          alert("Slot deleted permanently.");
         }
-
-        calendar.refetchEvents();
       }
-    });
 
-    calendar.render();
+      // AVAILABLE SLOT
+      else {
+        const confirmDelete = confirm("Delete this available slot?");
+        if (confirmDelete) {
+          await fetch(`/api/delete_slot/${event.id}`, { method: "DELETE" });
+          alert("Slot deleted.");
+        }
+      }
 
-    // ADD SLOT (unchanged)
-    document.getElementById('addSlotForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const formData = new FormData(e.target);
-      const date = formData.get('date');
-      const startTime = formData.get('start_time');
-      const duration = parseFloat(formData.get('duration'));
+      info.view.calendar.refetchEvents();
+    }
 
-      const [hours, minutes] = startTime.split(':').map(Number);
-      const start = new Date(0, 0, 0, hours, minutes);
-      const end = new Date(start.getTime() + duration * 60 * 60 * 1000);
-      const endTime = `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
-
-      await fetch('/api/add_slot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date, start_time: startTime, end_time: endTime })
-      });
-
-      e.target.reset();
-      calendar.refetchEvents();
-    });
   });
+
+  calendar.render();
+
+  // ▪▪▪ ADD SLOT HANDLER (now includes court) ▪▪▪
+  document.getElementById('addSlotForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+
+    const date = formData.get('date');
+    const startTime = formData.get('start_time');
+    const duration = parseFloat(formData.get('duration'));
+    const court = formData.get('court') || "Unknown";
+
+    const [hours, minutes] = startTime.split(':').map(Number);
+    const start = new Date(0, 0, 0, hours, minutes);
+    const end = new Date(start.getTime() + duration * 60 * 60 * 1000);
+    const endTime = `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
+
+    await fetch('/api/add_slot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date, start_time: startTime, end_time: endTime, court })
+    });
+
+    e.target.reset();
+    calendar.refetchEvents();
+  });
+});
 </script>
 
 </body>
